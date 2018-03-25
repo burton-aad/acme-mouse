@@ -1,0 +1,176 @@
+* Default mouse bindings
+#+BEGIN_SRC elisp
+  (seq-sort (lambda (a b)
+              (string-lessp (symbol-name (car a))
+                            (symbol-name (car b))))
+   (seq-filter (lambda (binding)
+                 (and
+                  (consp binding)
+                  (symbolp (car binding))
+                  (string-match ".*mouse.*" (symbol-name (car binding)))))
+               (current-global-map)))
+#+END_SRC
+* Action stuff
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (makunbound 'acme-mouse)
+  (makunbound 'acme-mouse-map)
+
+  ;; Transitions
+  (setq acme-mouse-transition-table
+        '((none (down left) left mouse-drag-region)
+          (none (down middle) middle)
+          (none (down right) right)
+
+          (left (down middle) left-middle
+                ;acme-mouse-cut
+                )
+          (left (down right) left-right
+                ;acme-mouse-paste
+                )
+
+          ;; Mouse up
+          (left (up left) none ;acme-mouse-lmb
+                mouse-set-point)
+          (middle (up middle) none ;(selection-or-point acme-mouse-eval 'sexp)
+                  mouse-yank-primary)
+          (right (up right) none ;(selection-or-point acme-mouse-search 'word)
+                 mouse-save-then-kill)
+
+          (left-middle (up middle) left)
+          (left-right (up right) left)
+
+          ;; Mouse drag up (left (drag left) none mouse-set-region)
+          (left (drag left) none
+                mouse-set-region)
+          (middle (drag middle) none ;(selected-region acme-mouse-eval)
+                  )
+          (right (drag right) none ;(selected-region acme-mouse-search)
+                 )))
+#+END_SRC
+
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (defmacro selection-or-point (command point-type)
+    `(lambda (click)
+       (let ((clicked (posn-point (event-end click))))
+         (if (and (< (mark) clicked (point)) (use-region-p))
+             (,command click (mark) (point))
+           (let ((bounds (bounds-of-thing-at-point point-type)))
+             (,command click (car bounds) (cdr bounds)))))))
+
+  (defmacro selected-region (command)
+    `(lambda (click)
+       (let* ((start (posn-point (event-start click)))
+              (end (posn-point (event-start click)))
+              (lo (min start end))
+              (hi (max start end)))
+         (,command click lo hi))))
+#+END_SRC
+
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (defvar acme-mouse-state 'none
+    "The state of the chording state-machine.")
+
+  (defvar acme-mouse-last-command nil
+    "If a cut or a paste was executed, while still holding down the
+    left button, that command will be here.")
+#+END_SRC
+
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (defun acme-mouse-lmb (click)
+    ;; (setq deactivate-mark 'nil)
+    (if acme-mouse-last-command
+        (mouse-set-point click))
+    ;; (setq transient-mark-mode (cons 'only t)) ;; TODO do we need this?
+    (setq acme-mouse-last-command 'none))
+
+  (defun acme-mouse-cut (click)
+    (interactive "e")
+    (setq acme-mouse-last-command 'cut)
+    (mouse-set-point click)
+    (let ((start-end (mouse-start-end (mark) (point) (min no-of-clicks 2))))
+      (message "cut %S" click)))
+
+  (defun acme-mouse-paste (click)
+    (interactive "e")
+    (setq acme-mouse-last-command 'paste)
+    (message "paste %S" click))
+
+  (defun acme-mouse-eval (click lo hi)
+    (message "eval %S %S %S" click lo hi))
+
+  (defun acme-mouse-search (click lo hi)
+    (message "search %S %S %S" click lo hi))
+#+END_SRC
+* State-machine driver
+If we only change the state, then we want to do that transparently,
+hence setting the ~last-command~.
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (defmacro acme-mouse-make-transition (&rest input)
+    `(lambda ()
+       (interactive)
+       (setq this-command last-command)   ; Transparent
+       (cond
+        ,@(seq-map (lambda (el) (seq-let [start _ end &rest functions] el
+                                  `((equal acme-mouse-state ',start)
+                                    (setq acme-mouse-state ',end)
+                                    . ,(seq-map (lambda (f)
+                                                  `(progn
+                                                     (setq this-command ',f)
+                                                     (call-interactively ',f)))
+                                                functions))))
+                   (seq-filter (lambda (el) (seq-let [_ label _ _] el
+                                              (equal label input)))
+                               acme-mouse-transition-table))
+        (t (setq acme-mouse-state 'none)))))
+
+#+END_SRC
+* Minor Mode
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+  (defgroup acme-mouse nil
+    "Acme mouse chording mode for Emacs"
+    :group 'mouse)
+
+  (defface acme-mouse-region-eval
+    '((((class color) (min-colors 8))
+       :inverse-video t :foreground "dark red")
+      (t :inverse-video t))
+    "Face for selecting with the middle mouse button."
+    :group 'acme-mouse)
+
+  (defface acme-mouse-region-search
+    '((((class color) (min-colors 8))
+       :inverse-video t :foreground "dark green")
+      (t :inverse-video t))
+    "Face for selecting with the right mouse button."
+    :group 'acme-mouse)
+
+  ;; TODO double and triple clicks?
+  (defvar acme-mouse-map
+    (let ((keymap (make-sparse-keymap)))
+      (define-key keymap [(down-mouse-1)] (acme-mouse-make-transition down left))
+      (define-key keymap [(down-mouse-2)] (acme-mouse-make-transition down middle))
+      (define-key keymap [(down-mouse-3)] (acme-mouse-make-transition down right))
+      (define-key keymap [(mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(drag-mouse-1)] (acme-mouse-make-transition drag left))
+      (define-key keymap [(drag-mouse-2)] (acme-mouse-make-transition drag middle))
+      (define-key keymap [(drag-mouse-3)] (acme-mouse-make-transition drag right))
+      keymap)
+    "Keymap for `acme-mouse` mode.")
+
+  ;;;###autoload
+  (define-minor-mode acme-mouse
+    "Acme mouse mode enables the button actions of Acme:
+    ,* Chording left and middle cuts the region
+    ,* Chording left and middle pastes at point
+    ,* Clicking with middle evaluates elisp sexp before point
+    ,* Clicking with right searches word at point
+    ,* Dragging with middle evaluates selected region as elisp expression
+    ,* Dragging with right searches region"
+    nil
+    " Acme-Mouse"
+    acme-mouse-map
+    :group 'acme-mouse
+    :global t)
+#+END_SRC
