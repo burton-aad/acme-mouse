@@ -18,43 +18,53 @@
   ;; Transitions
   (setq acme-mouse-transition-table
         '((none (down left) left mouse-drag-region)
-          (none (down middle) middle)
-          (none (down right) right)
+          (none (down middle) middle
+                (acme-mouse-face-remap 'acme-mouse-region-eval)
+                mouse-drag-secondary)
+          (none (down right) right
+                (acme-mouse-face-remap 'acme-mouse-region-search)
+                mouse-drag-secondary)
 
           (left (down middle) left-middle
-                ;acme-mouse-cut
-                )
+                acme-mouse-cut)
           (left (down right) left-right
-                ;acme-mouse-paste
-                )
+                acme-mouse-paste)
 
           ;; Mouse up
-          (left (up left) none ;acme-mouse-lmb
+          (left (up left) none            ;acme-mouse-lmb
                 mouse-set-point)
-          (middle (up middle) none ;(selection-or-point acme-mouse-eval 'sexp)
-                  mouse-yank-primary)
-          (right (up right) none ;(selection-or-point acme-mouse-search 'word)
-                 mouse-save-then-kill)
+          (middle (up middle) none        ;mouse-yank-primary
+                  mouse-start-secondary
+                  (acme-mouse-face-unmap)
+                  (selection-or-point acme-mouse-eval 'sexp))
+          (right (up right) none          ;mouse-save-then-kill
+                  mouse-start-secondary
+                 (acme-mouse-face-unmap)
+                 (selection-or-point acme-mouse-search 'word))
 
           (left-middle (up middle) left)
           (left-right (up right) left)
 
-          ;; Mouse drag up (left (drag left) none mouse-set-region)
-          (left (drag left) none
-                mouse-set-region)
-          (middle (drag middle) none ;(selected-region acme-mouse-eval)
-                  )
-          (right (drag right) none ;(selected-region acme-mouse-search)
-                 )))
+          ;; Mouse drag up
+          (left (drag left) none mouse-set-region)
+          (middle (drag middle) none
+                  mouse-set-secondary
+                  (acme-mouse-face-unmap)
+                  (selected-region acme-mouse-eval))
+          (right (drag right) none
+                 mouse-set-secondary
+                 (acme-mouse-face-unmap)
+                 (selected-region acme-mouse-search))))
 #+END_SRC
 
 #+BEGIN_SRC elisp :tangle acme-mouse-new.el
   (defmacro selection-or-point (command point-type)
     `(lambda (click)
        (let ((clicked (posn-point (event-end click))))
-         (if (and (< (mark) clicked (point)) (use-region-p))
-             (,command click (mark) (point))
-           (let ((bounds (bounds-of-thing-at-point point-type)))
+         (if (and (<= (mark) clicked (point)) (use-region-p))
+             (progn (message "Sel") (,command click (mark) (point)))
+           (let ((bounds (bounds-of-thing-at-point ,point-type)))
+             (message "Point")
              (,command click (car bounds) (cdr bounds)))))))
 
   (defmacro selected-region (command)
@@ -70,30 +80,48 @@
   (defvar acme-mouse-state 'none
     "The state of the chording state-machine.")
 
-  (defvar acme-mouse-last-command nil
-    "If a cut or a paste was executed, while still holding down the
-    left button, that command will be here.")
+  (defvar acme-mouse-remapping nil
+    "The remapping applied to the region face.")
+
+  (defvar acme-mouse-start-click nil
+    "The start click of the transition from 'none state, set to
+    nil on a transition back to 'none state.")
 #+END_SRC
 
 #+BEGIN_SRC elisp :tangle acme-mouse-new.el
-  (defun acme-mouse-lmb (click)
-    ;; (setq deactivate-mark 'nil)
-    (if acme-mouse-last-command
-        (mouse-set-point click))
-    ;; (setq transient-mark-mode (cons 'only t)) ;; TODO do we need this?
-    (setq acme-mouse-last-command 'none))
+  (defun acme-mouse-face-unmap ()
+    (when acme-mouse-remapping
+      (face-remap-remove-relative acme-mouse-remapping)
+      (setq acme-mouse-remapping nil)))
+
+  (defun acme-mouse-face-remap (face)
+    (acme-mouse-face-unmap)
+    (setq acme-mouse-remapping (face-remap-add-relative 'secondary-selection face)))
+
 
   (defun acme-mouse-cut (click)
     (interactive "e")
-    (setq acme-mouse-last-command 'cut)
-    (mouse-set-point click)
-    (let ((start-end (mouse-start-end (mark) (point) (min no-of-clicks 2))))
-      (message "cut %S" click)))
+    (let ((beg (posn-point (event-start acme-mouse-start-click)))
+          (end (posn-point (event-end click)))
+          (clicks (event-click-count acme-mouse-start-click)))
+      (mouse-start-end beg end (1- clicks))
+      (message "last: %S\tcut: %S" (eq last-command 'yank) click)
+      (if (eq last-command 'yank)
+          (undo)
+        (kill-region (mark) (point))
+        ;;(setq this-command 'kill-region)
+        )))
 
   (defun acme-mouse-paste (click)
     (interactive "e")
-    (setq acme-mouse-last-command 'paste)
-    (message "paste %S" click))
+    (let ((beg (posn-point (event-start acme-mouse-start-click)))
+          (end (posn-point (event-end click)))
+          (clicks (event-click-count acme-mouse-start-click)))
+      (mouse-start-end beg end (1- clicks))
+      (message "last: %S\tpaste: %S" (eq last-command 'kill-region) click)
+      (if (eq last-command 'kill-region)
+          (undo)
+        (yank))))
 
   (defun acme-mouse-eval (click lo hi)
     (message "eval %S %S %S" click lo hi))
@@ -106,22 +134,30 @@ If we only change the state, then we want to do that transparently,
 hence setting the ~last-command~.
 #+BEGIN_SRC elisp :tangle acme-mouse-new.el
   (defmacro acme-mouse-make-transition (&rest input)
-    `(lambda ()
-       (interactive)
+    `(lambda (click)
+       (interactive "e")
        (setq this-command last-command)   ; Transparent
+       (when (eq acme-mouse-state 'none)
+         (setq acme-mouse-start-click click))
        (cond
-        ,@(seq-map (lambda (el) (seq-let [start _ end &rest functions] el
-                                  `((equal acme-mouse-state ',start)
-                                    (setq acme-mouse-state ',end)
-                                    . ,(seq-map (lambda (f)
-                                                  `(progn
-                                                     (setq this-command ',f)
-                                                     (call-interactively ',f)))
-                                                functions))))
-                   (seq-filter (lambda (el) (seq-let [_ label _ _] el
-                                              (equal label input)))
+        ,@(seq-map (lambda (el)
+                     (seq-let [start _ end &rest functions] el
+                       `((equal acme-mouse-state ',start)
+                         (setq acme-mouse-state ',end)
+                         ,@(seq-map (lambda (f)
+                                      (if (commandp f t)
+                                          `(progn
+                                             (setq this-command ',f)
+                                             (call-interactively ',f))
+                                        `,f))
+                                    functions))))
+                   (seq-filter (lambda (el)
+                                 (seq-let [_ label _ _] el
+                                   (equal label input)))
                                acme-mouse-transition-table))
-        (t (setq acme-mouse-state 'none)))))
+        (t (setq acme-mouse-state 'none)))
+       (when (eq acme-mouse-state 'none)
+         (setq acme-mouse-start-click click))))
 
 #+END_SRC
 * Minor Mode
@@ -173,4 +209,7 @@ hence setting the ~last-command~.
     acme-mouse-map
     :group 'acme-mouse
     :global t)
+
+  (provide 'acme-mouse)
+  (acme-mouse)
 #+END_SRC
