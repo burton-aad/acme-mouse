@@ -1,29 +1,91 @@
 * Default mouse bindings
-#+BEGIN_SRC elisp
-  (seq-sort (lambda (a b)
+#+BEGIN_SRC elisp :exports both
+  (pp (sort (cl-reduce (lambda (acc binding)
+                         (if (and
+                              (consp binding)
+                              (symbolp (car binding))
+                              (string-match ".*mouse.*" (symbol-name (car binding))))
+                             (cons binding acc)
+                           acc))
+                       (current-global-map)
+                       :initial-value nil)
+            (lambda (a b)
               (string-lessp (symbol-name (car a))
-                            (symbol-name (car b))))
-   (seq-filter (lambda (binding)
-                 (and
-                  (consp binding)
-                  (symbolp (car binding))
-                  (string-match ".*mouse.*" (symbol-name (car binding)))))
-               (current-global-map)))
+                            (symbol-name (car b))))))
 #+END_SRC
+
+#+RESULTS:
+#+begin_example
+((C-down-mouse-1 . mouse-buffer-menu)
+ (C-down-mouse-2 . facemenu-menu)
+ (C-down-mouse-3 menu-item "Menu Bar" ignore :filter
+                 (lambda
+                   (_)
+                   (if
+                       (zerop
+                        (or
+                         (frame-parameter nil 'menu-bar-lines)
+                         0))
+                       (mouse-menu-bar-map)
+                     (mouse-menu-major-mode-map))))
+ (C-mouse-4 . mwheel-scroll)
+ (C-mouse-5 . mwheel-scroll)
+ (C-mouse-6 lambda nil
+            (interactive)
+            (setq truncate-lines nil))
+ (C-mouse-7 lambda nil
+            (interactive)
+            (setq truncate-lines t))
+ (M-down-mouse-1 . mouse-drag-secondary)
+ (M-drag-mouse-1 . mouse-set-secondary)
+ (M-mouse-1 . mouse-start-secondary)
+ (M-mouse-2 . mouse-yank-secondary)
+ (M-mouse-3 . mouse-secondary-save-then-kill)
+ (S-down-mouse-1 . mouse-appearance-menu)
+ (S-mouse-3 . kmacro-end-call-mouse)
+ (S-mouse-4 . mwheel-scroll)
+ (S-mouse-5 . mwheel-scroll)
+ (double-mouse-1 . mouse-set-point)
+ (down-mouse-1 . mouse-drag-region)
+ (drag-mouse-1 . mouse-set-region)
+ (mouse-1 . mouse-set-point)
+ (mouse-2 . mouse-yank-primary)
+ (mouse-3 . mouse-save-then-kill)
+ (mouse-4 lambda nil
+          (interactive)
+          (scroll-down 1))
+ (mouse-5 lambda nil
+          (interactive)
+          (scroll-up 1))
+ (mouse-6 lambda nil
+          (interactive)
+          (when truncate-lines
+            (scroll-right 1 t)))
+ (mouse-7 lambda nil
+          (interactive)
+          (when truncate-lines
+            (scroll-left 1 t)))
+ (mouse-movement . ignore)
+ (triple-mouse-1 . mouse-set-point))
+#+end_example
+
 * Action stuff
-#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+#+BEGIN_SRC elisp :tangle acme-mouse-new.el :noweb yes
+  ;; -*- lexical-binding: t -*-
   (makunbound 'acme-mouse)
   (makunbound 'acme-mouse-map)
 
+  <<Macros>>
+
   ;; Transitions
   (setq acme-mouse-transition-table
-        '((none (down left) left mouse-drag-region)
+        `((none (down left) left mouse-drag-region)
           (none (down middle) middle
                 (acme-mouse-face-remap 'acme-mouse-region-eval)
-                mouse-drag-secondary)
+                mouse-drag-region)
           (none (down right) right
                 (acme-mouse-face-remap 'acme-mouse-region-search)
-                mouse-drag-secondary)
+                mouse-drag-region)
 
           (left (down middle) left-middle
                 acme-mouse-cut)
@@ -34,13 +96,13 @@
           (left (up left) none            ;acme-mouse-lmb
                 mouse-set-point)
           (middle (up middle) none        ;mouse-yank-primary
-                  mouse-start-secondary
+                  mouse-set-point
                   (acme-mouse-face-unmap)
-                  (selection-or-point acme-mouse-eval 'sexp))
+                  ,(selection-or-point 'acme-mouse-eval 'sexp))
           (right (up right) none          ;mouse-save-then-kill
-                  mouse-start-secondary
+                 mouse-set-point
                  (acme-mouse-face-unmap)
-                 (selection-or-point acme-mouse-search 'word))
+                 ,(selection-or-point 'acme-mouse-search 'word))
 
           (left-middle (up middle) left)
           (left-right (up right) left)
@@ -48,32 +110,42 @@
           ;; Mouse drag up
           (left (drag left) none mouse-set-region)
           (middle (drag middle) none
-                  mouse-set-secondary
+                  mouse-set-region
                   (acme-mouse-face-unmap)
-                  (selected-region acme-mouse-eval))
+                  ,(selected-region acme-mouse-eval))
           (right (drag right) none
-                 mouse-set-secondary
+                 mouse-set-region
                  (acme-mouse-face-unmap)
-                 (selected-region acme-mouse-search))))
+                 ,(selected-region acme-mouse-search))))
 #+END_SRC
 
-#+BEGIN_SRC elisp :tangle acme-mouse-new.el
+#+NAME: Macros
+#+BEGIN_SRC elisp
+  (defun acme-mouse-selection (click)
+    (let* ((start (posn-point (event-start acme-mouse-start-click)))
+           (end (posn-point (event-start click)))
+           (clicks (event-click-count acme-mouse-start-click)))
+      (mouse-start-end start end (1- clicks))))
+
   (defmacro selection-or-point (command point-type)
     `(lambda (click)
-       (let ((clicked (posn-point (event-end click))))
-         (if (and (<= (mark) clicked (point)) (use-region-p))
-             (progn (message "Sel") (,command click (mark) (point)))
-           (let ((bounds (bounds-of-thing-at-point ,point-type)))
-             (message "Point")
-             (,command click (car bounds) (cdr bounds)))))))
+       (interactive "e")
+       (let* ((clicked (posn-point (event-end click)))
+              (bounds (bounds-of-thing-at-point ,point-type)))
+         (cond ((and (<= (mark) clicked (point)) (use-region-p)))
+               (funcall ,command click
+                        (buffer-substring (mark) (point)))
+               ((or (not (car bounds)) (not (cdr bounds)))
+                (funcall ,command click
+                         (buffer-substring (car bounds) (cdr bounds))))
+               (t (funcall ,command click (elisp--preceding-sexp)))))))
 
   (defmacro selected-region (command)
     `(lambda (click)
-       (let* ((start (posn-point (event-start click)))
-              (end (posn-point (event-start click)))
-              (lo (min start end))
-              (hi (max start end)))
-         (,command click lo hi))))
+       (interactive "e")
+       (setq this-command ',command)
+       (funcall ',command click
+                (apply 'buffer-substring (acme-mouse-selection click)))))
 #+END_SRC
 
 #+BEGIN_SRC elisp :tangle acme-mouse-new.el
@@ -96,38 +168,25 @@
 
   (defun acme-mouse-face-remap (face)
     (acme-mouse-face-unmap)
-    (setq acme-mouse-remapping (face-remap-add-relative 'secondary-selection face)))
-
+    (setq acme-mouse-remapping (face-remap-add-relative 'region face)))
 
   (defun acme-mouse-cut (click)
     (interactive "e")
-    (let ((beg (posn-point (event-start acme-mouse-start-click)))
-          (end (posn-point (event-end click)))
-          (clicks (event-click-count acme-mouse-start-click)))
-      (mouse-start-end beg end (1- clicks))
-      (message "last: %S\tcut: %S" (eq last-command 'yank) click)
-      (if (eq last-command 'yank)
-          (undo)
-        (kill-region (mark) (point))
-        ;;(setq this-command 'kill-region)
-        )))
+    (if (eq last-command 'yank)
+        (undo)
+      (apply 'kill-region (acme-mouse-selection click))))
 
   (defun acme-mouse-paste (click)
     (interactive "e")
-    (let ((beg (posn-point (event-start acme-mouse-start-click)))
-          (end (posn-point (event-end click)))
-          (clicks (event-click-count acme-mouse-start-click)))
-      (mouse-start-end beg end (1- clicks))
-      (message "last: %S\tpaste: %S" (eq last-command 'kill-region) click)
-      (if (eq last-command 'kill-region)
-          (undo)
-        (yank))))
+    (if (eq last-command 'kill-region)
+        (undo)
+      (yank)))
 
-  (defun acme-mouse-eval (click lo hi)
-    (message "eval %S %S %S" click lo hi))
+  (defun acme-mouse-eval (click str)
+    (message "eval %S" str))
 
-  (defun acme-mouse-search (click lo hi)
-    (message "search %S %S %S" click lo hi))
+  (defun acme-mouse-search (click str)
+    (message "search %S" str))
 #+END_SRC
 * State-machine driver
 If we only change the state, then we want to do that transparently,
@@ -140,25 +199,28 @@ hence setting the ~last-command~.
        (when (eq acme-mouse-state 'none)
          (setq acme-mouse-start-click click))
        (cond
-        ,@(seq-map (lambda (el)
-                     (seq-let [start _ end &rest functions] el
-                       `((equal acme-mouse-state ',start)
-                         (setq acme-mouse-state ',end)
-                         ,@(seq-map (lambda (f)
-                                      (if (commandp f t)
-                                          `(progn
-                                             (setq this-command ',f)
-                                             (call-interactively ',f))
-                                        `,f))
-                                    functions))))
-                   (seq-filter (lambda (el)
-                                 (seq-let [_ label _ _] el
-                                   (equal label input)))
-                               acme-mouse-transition-table))
+        ,@(cl-reduce (lambda (acc transition)
+                       (pcase transition
+                         (`(,start ,(pred (equal input)) ,end . ,funs)
+                          `(foo . ,acc)
+                          (cons
+                           `((equal acme-mouse-state ',start)
+                             (setq acme-mouse-state ',end)
+                             ,@(apply 'append
+                                      (cl-mapcar
+                                       (lambda (f)
+                                         (if (commandp f t)
+                                             `((setq this-command ',f)
+                                               (call-interactively ',f))
+                                           `(,f)))
+                                       funs)))
+                           acc))
+                         (_ acc)))
+                     acme-mouse-transition-table
+                     :initial-value nil)
         (t (setq acme-mouse-state 'none)))
        (when (eq acme-mouse-state 'none)
-         (setq acme-mouse-start-click click))))
-
+         (setq acme-mouse-start-click nil))))
 #+END_SRC
 * Minor Mode
 #+BEGIN_SRC elisp :tangle acme-mouse-new.el
@@ -189,6 +251,12 @@ hence setting the ~last-command~.
       (define-key keymap [(mouse-1)] (acme-mouse-make-transition up left))
       (define-key keymap [(mouse-2)] (acme-mouse-make-transition up middle))
       (define-key keymap [(mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(double-mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(double-mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(double-mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(triple-mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(triple-mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(triple-mouse-3)] (acme-mouse-make-transition up right))
       (define-key keymap [(drag-mouse-1)] (acme-mouse-make-transition drag left))
       (define-key keymap [(drag-mouse-2)] (acme-mouse-make-transition drag middle))
       (define-key keymap [(drag-mouse-3)] (acme-mouse-make-transition drag right))
