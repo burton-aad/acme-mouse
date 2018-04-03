@@ -393,3 +393,30 @@ hence setting the ~last-command~.
 
 - Working with evil-mode :: I'd like to give evil-mode a try, but I
      know at the moment this doesn't work with evil-mode.
+
+- Pipe-eval :: Having something selected, then chording middle-left
+               pipes the selection into the chorded (selected or at
+               point) word. For shell, the STDIN is probably good
+               enough, but not sure what is the best action to take
+               for Elisp. Perhaps if it is ~commandp~,
+               call-interactively it, and hope it uses the region, if
+               it is ~functionp~ call it with string/sexp/start/end?
+
+               Also, consider Acme's use of >cmd, |cmd and <cmd.
+
+- Middle-mouse emulation :: Not sure if this should be separate, but
+     emulate the middle-mouse button with shift-right click. My acme
+     actually uses a shift-press as a right-mouse click, and a
+     control-press as a middle-mouse click, but apparently this might
+     require Emacs C source changes, as plain modifier presses cannot
+     be bound.
+
+- Emulate editable Tag :: In acme, there is an editable tag window
+     (which contains the file name, what I suppose would be called the
+     mode line in Emacs). It would be useful to have something similar
+     here too.
+
+- More features? :: Re-read https://research.swtch.com/acme.pdf
+
+- Exchange primary and secondary selection :: This is not something
+     that Acme actually has, but I would find this extremely useful.
