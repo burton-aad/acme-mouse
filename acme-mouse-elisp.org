@@ -1,0 +1,2 @@
+* COMMENT License
+See [[file:LICENSE.org][LICENSE.org]].

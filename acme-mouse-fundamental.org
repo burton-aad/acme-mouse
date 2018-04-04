@@ -1,0 +1,175 @@
+* COMMENT License
+See [[file:LICENSE.org][LICENSE.org]].
+* Fundamental acme-mouse
+** State machine
+The format of the state machine is ~(start symbol next statements...)~
+where the statements are either a variable mapping to a command
+(e.g. ~mouse-drag-region~), in which case they get
+~call-interactively~'d otherwise they are executed as a statement.
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el :noweb yes
+  ;; -*- lexical-binding: t -*-
+
+  (require 'acme-mouse)
+
+  (defmacro region-or-click (region-cmd click-cmd)
+    `(lambda (click)
+       (interactive "e")
+       (seq-let [mark point active] acme-mouse-saved-mark-point-active
+         (let ((lo (min (or mark point) point)) (hi (max (or mark point) point)))
+           (if (and active (<= lo (posn-point (event-end click)) hi))
+               (progn
+                 (acme-mouse-restore-mark-point-active)
+                 (funcall-interactively ,region-cmd click lo hi))
+             (call-interactively ,click-cmd))))))
+
+  ;; Transitions
+  (acme-mouse-add 'none '(down middle)
+                  (acme-mouse-face-remap 'acme-mouse-face-eval) ;; TODO: remap guard!
+                  mouse-drag-region)
+  (acme-mouse-add 'none '(down right)
+                  (acme-mouse-face-remap 'acme-mouse-face-search)
+                  mouse-drag-region)
+  (acme-mouse-add 'left '(down middle) acme-mouse-cut)
+  (acme-mouse-add 'left '(down right) acme-mouse-paste)
+
+  (acme-mouse-add 'middle '(up middle)
+                  mouse-set-point
+                  (region-or-click 'acme-mouse-eval-region 'acme-mouse-eval-click))
+  (acme-mouse-add 'right '(up right)
+                  mouse-set-point
+                  (region-or-click 'acme-mouse-search-region 'acme-mouse-search-click))
+  (acme-mouse-add 'middle-left '(up left)
+                  acme-mouse-eval-pipe-region)
+
+  (acme-mouse-add 'middle '(drag middle)
+                  acme-mouse-eval-region)
+  (acme-mouse-add 'right '(drag right)
+                  acme-mouse-search-region)
+#+END_SRC
+
+** Acme functionality
+*** Cut/paste
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  (defun acme-mouse-cut (click)
+    (interactive "e")
+    (if (eq last-command 'yank)
+        (undo)
+      (apply 'kill-region (acme-mouse-selection click))))
+
+  (defun acme-mouse-paste (click)
+    (interactive "e")
+    (if (eq last-command 'kill-region)
+        (undo)
+      (yank)))
+#+END_SRC
+
+#+RESULTS:
+: acme-mouse-paste
+
+*** Eval
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  (defun acme-mouse-eval-region (click lo hi)
+    (interactive "e\nr")
+    (eval-expression (read (buffer-substring (mark) (point))))
+    (acme-mouse-restore-mark-point-active))
+
+  (defun acme-mouse-eval-click (click)
+    (interactive "e")
+    (let ((sexp-at-point (thing-at-point 'sexp)))
+      (if (sexp-at-point)
+          (eval-expression (sexp-at-point))
+        (elisp--eval-last-sexp nil)))
+    (acme-mouse-restore-mark-point-active))
+#+END_SRC
+
+#+RESULTS:
+: acme-mouse-eval-click
+
+*** Search
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  (defun acme-mouse-search-region (click lo hi)
+    (interactive "e\nr")
+    (let ((word (buffer-substring lo hi)))
+      (unless (search-forward word nil t)
+        (goto-char (point-min))
+        (search-forward word nil t)
+        (acme-mouse-highlight-search word))
+      (acme-mouse-highlight-search word)))
+
+  (defun acme-mouse-search-click (click)
+    (interactive "e")
+    (let ((file (thing-at-point 'filename))
+          (word (thing-at-point 'word))
+          (saved-point (point)))
+      (cond ((and file (file-readable-p file))
+             (special-display-popup-frame
+              (find-file-noselect file)))
+            ((and word (search-forward word nil t))
+             (acme-mouse-highlight-search word))
+            ((and word
+                  (goto-char (point-min))
+                  (search-forward word nil t))
+             (message "Wrapped search")
+             (acme-mouse-highlight-search word)))))
+
+  (defun acme-mouse-highlight-search (str)
+    "Set the region to the current search result. Assumes point is
+  at the end of the result."
+    (set-mark (point))
+    (search-backward str nil t)
+    (exchange-point-and-mark)
+    (unless (posn-at-point)
+      (recenter))
+    (let* ((x-y (posn-x-y (posn-at-point)))
+           (edges (window-inside-pixel-edges))
+           (width (default-font-width))
+           (height (default-font-height))
+           (x (+ (car x-y) (nth 0 edges) (- (/ width 2))))
+           (y (+ (cdr x-y) (nth 1 edges) (/ height 2))))
+      (set-mouse-pixel-position (selected-frame) x y)))
+#+END_SRC
+
+#+RESULTS:
+: acme-mouse-highlight-search
+
+** Keymap
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  (defvar acme-mouse-map
+    (let ((keymap (make-sparse-keymap)))
+      (define-key keymap [(down-mouse-1)] (acme-mouse-make-transition down left))
+      (define-key keymap [(down-mouse-2)] (acme-mouse-make-transition down middle))
+      (define-key keymap [(down-mouse-3)] (acme-mouse-make-transition down right))
+      (define-key keymap [(mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(double-mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(double-mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(double-mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(triple-mouse-1)] (acme-mouse-make-transition up left))
+      (define-key keymap [(triple-mouse-2)] (acme-mouse-make-transition up middle))
+      (define-key keymap [(triple-mouse-3)] (acme-mouse-make-transition up right))
+      (define-key keymap [(drag-mouse-1)] (acme-mouse-make-transition drag left))
+      (define-key keymap [(drag-mouse-2)] (acme-mouse-make-transition drag middle))
+      (define-key keymap [(drag-mouse-3)] (acme-mouse-make-transition drag right))
+      keymap)
+    "Keymap for `acme-mouse` mode.")
+#+END_SRC
+** Minor mode
+#+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  ;;;###autoload
+  (define-minor-mode acme-mouse-fundamental
+    "Acme mouse mode enables the button actions of Acme:
+    ,* Chording left and middle cuts the region
+    ,* Chording left and middle pastes at point
+    ,* Clicking with middle evaluates elisp sexp before point
+    ,* Clicking with right searches word at point
+    ,* Dragging with middle evaluates selected region as elisp expression
+    ,* Dragging with right searches region"
+    nil
+    " Acme-Mouse"
+    acme-mouse-fundamental-map
+    :group 'acme-mouse
+    :global t)
+
+  (provide 'acme-mouse-fundamental)
+#+END_SRC

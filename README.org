@@ -1,0 +1,82 @@
+* Description
+This implements the Acme-style chording features, left-middle to cut;
+left-right to paste; middle click/sweep to execute; and right
+click/sweep to search, or open a file.
+
+To compile this file: open in Emacs in org-mode, and tangle (C-c C-v
+C-t), then ~(load-file "acme-mouse-new.el")~ it. This defines the
+minor-mode ~acme-mouse~. Or perhaps just do ~M-:
+(org-babel-execute-buffer)~, but you might want to ~M-: (setq
+org-confirm-babel-evaluate nil)~ first.
+* History
+This is a newly written software, but heavily inspired by
+https://github.com/akrito/acme-mouse by Alex Kritikos. That in turn
+cites Dan McCarthy's acme-search.el, which is perhaps the least
+different feature of this too, except I use pixel positions. This is
+because I use variable-width fonts (like Acme does, Google Noto in
+case you are wondering).
+* Missing features
+- Default left-mouse up binding :: The left-mouse button click should
+     be taken from the major mode, e.g. at the moment when we click
+     on a link in an info page.
+
+     Perhaps this could also be used for right-button clicks, when
+     they didn't click in a region, or dragged a region? (And
+     similarly for middle-mouse button). The macro could possibly grab
+     the current binding, if it is evaluated before its result is
+     assigned.
+
+- Mode-specific functions :: We should change eval based on the mode
+     (e.g. Scheme/Standard ML/etc for the current REPL). Also, loading
+     files based on library path/#include/(require 'feature) would be
+     sweet! And these should be split out into a different file, as
+     they are irrelevant to the central mechanism. And don't forget
+     the paredit cut.
+
+- Don't copy on look select/paste :: This is a major bug at the
+     moment.
+
+- Working with evil-mode :: I'd like to give evil-mode a try, but I
+     know at the moment this doesn't work with evil-mode.
+
+- Pipe-eval :: Having something selected, then chording middle-left
+               pipes the selection into the chorded (selected or at
+               point) word. For shell, the STDIN is probably good
+               enough, but not sure what is the best action to take
+               for Elisp. Perhaps if it is ~commandp~,
+               call-interactively it, and hope it uses the region, if
+               it is ~functionp~ call it with string/sexp/start/end?
+
+               Also, consider Acme's use of >cmd, |cmd and <cmd.
+
+- Middle-mouse emulation :: Not sure if this should be separate, but
+     emulate the middle-mouse button with shift-right click. My acme
+     actually uses a shift-press as a right-mouse click, and a
+     control-press as a middle-mouse click, but apparently this might
+     require Emacs C source changes, as plain modifier presses cannot
+     be bound.
+
+- Emulate editable Tag :: In acme, there is an editable tag window
+     (which contains the file name, what I suppose would be called the
+     mode line in Emacs). It would be useful to have something similar
+     here too.
+
+- More features? :: Re-read https://research.swtch.com/acme.pdf
+
+- Exchange primary and secondary selection :: This is not something
+     that Acme actually has, but I would find this extremely useful.
+* Bugs
+- Bug with undo-tree :: When using undo-tree, sometimes the undo
+     breaks, when you try to undo past a left-middle; left-right
+     chord. This only happens if you haven't opened the undo-tree
+     buffer before starting to undo past the acme-mouse's
+     undo. Probably just not using undo would fix it. Or possibly
+     using undo-tree-undo when you have undo-tree, which is what is
+     implemented currently, but needs more testing.
+* License
+#+INCLUDE: "LICENSE.org"
+* Implementation
+#+INCLUDE: "acme-mouse.org"
+#+INCLUDE: "acme-mouse-fundamental.org"
+#+INCLUDE: "acme-mouse-elisp.org"
+#+INCLUDE: "acme-mouse-scheme.org"
