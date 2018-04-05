@@ -217,13 +217,17 @@ where the statements are either a variable mapping to a command
   (defun acme-mouse-cut (click)
     (interactive "e")
     (if (eq last-command 'yank)
-        (undo)
+        (if (assq 'undo-tree-mode minor-mode-alist)
+            (undo-tree-undo)
+          (undo))
       (apply 'kill-region (acme-mouse-selection click))))
 
   (defun acme-mouse-paste (click)
     (interactive "e")
     (if (eq last-command 'kill-region)
-        (undo)
+        (if (assq 'undo-tree-mode minor-mode-alist)
+            (undo-tree-undo)
+          (undo))
       (yank)))
 #+END_SRC
 
@@ -383,6 +387,12 @@ hence setting the ~last-command~.
      be taken from the major mode, e.g. at the moment when we click
      on a link in an info page.
 
+     Perhaps this could also be used for right-button clicks, when
+     they didn't click in a region, or dragged a region? (And
+     similarly for middle-mouse button). The macro could possibly grab
+     the current binding, if it is evaluated before its result is
+     assigned.
+
 - Mode-specific functions :: We should change eval based on the mode
      (e.g. Scheme/Standard ML/etc for the current REPL). Also, loading
      files based on library path/#include/(require 'feature) would be
@@ -422,3 +432,11 @@ hence setting the ~last-command~.
 
 - Exchange primary and secondary selection :: This is not something
      that Acme actually has, but I would find this extremely useful.
+* TODO Bugs
+- Bug with undo-tree :: When using undo-tree, sometimes the undo
+     breaks, when you try to undo past a left-middle; left-right
+     chord. This only happens if you haven't opened the undo-tree
+     buffer before starting to undo past the acme-mouse's
+     undo. Probably just not using undo would fix it. Or possibly
+     using undo-tree-undo when you have undo-tree, which is what is
+     implemented currently, but needs more testing.
