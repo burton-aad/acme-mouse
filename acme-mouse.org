@@ -5,8 +5,8 @@ click/sweep to search, or open a file.
 
 To compile this file: open in Emacs in org-mode, and tangle (C-c C-v
 C-t), then ~(load-file "acme-mouse-new.el")~ it. This defines the
-minor-mode ~acme-mouse~. Or perhaps just do ~M-x
-org-babel-execute-buffer~, but you might want to ~M-: (setq
+minor-mode ~acme-mouse~. Or perhaps just do ~M-:
+(org-babel-execute-buffer)~, but you might want to ~M-: (setq
 org-confirm-babel-evaluate nil)~ first.
 * History
 This is a newly written software, but heavily inspired by
