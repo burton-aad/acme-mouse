@@ -1,24 +1,25 @@
-- [Description](#orgf79d318)
-- [History](#org03555f9)
-- [Missing features](#org552980a)
-- [Bugs](#org223ef93)
-- [License](#org581efab)
-  - [GPLv2+](#org055f2b7)
-- [Implementation](#org8cbfc3b)
-  - [Acme-mouse library](#org5c40490)
-    - [Global variables](#orgd4fbba5)
-    - [Basic state-machine](#org0d33632)
-    - [State-machine driver](#orga8830a3)
-    - [Selection faces](#org94c00a2)
-    - [Library](#org9a0734a)
-  - [Fundamental acme-mouse](#org192f2a3)
-    - [State machine](#orga3264da)
-    - [Acme functionality](#org637f6f1)
-    - [Keymap](#orgd9285ec)
-    - [Minor mode](#orge6b3083)
+- [Description](#orgcde4888)
+- [History](#orgc5f2d31)
+- [Missing features](#org08beae9)
+- [Bugs](#orgee615b2)
+- [License](#org81e242b)
+  - [GPLv2+](#org8535ec3)
+- [Implementation](#org6a3d144)
+  - [Acme-mouse library](#org84afcf4)
+    - [Global variables](#orgc21c0e5)
+    - [Basic state-machine](#org30facd4)
+    - [State-machine driver](#org5a1c80d)
+    - [Extending the state-machine](#orgb8aac47)
+    - [Selection faces](#orgc633530)
+    - [Library](#orgbaddb5e)
+  - [Fundamental acme-mouse](#org1c6fd41)
+    - [State machine](#orga366467)
+    - [Acme functionality](#orgc99935d)
+    - [Keymap](#orgb7a14ce)
+    - [Minor mode](#orgb3cd269)
 
 
-<a id="orgf79d318"></a>
+<a id="orgcde4888"></a>
 
 # Description
 
@@ -27,14 +28,14 @@ This implements the Acme-style chording features, left-middle to cut; left-right
 To compile this file: open in Emacs in org-mode, and tangle (C-c C-v C-t), then `(load-file "acme-mouse-new.el")` it. This defines the minor-mode `acme-mouse`. Or perhaps just do `M-: (org-babel-execute-buffer)`, but you might want to `M-: (setq org-confirm-babel-evaluate nil)` first.
 
 
-<a id="org03555f9"></a>
+<a id="orgc5f2d31"></a>
 
 # History
 
 This is a newly written software, but heavily inspired by <https://github.com/akrito/acme-mouse> by Alex Kritikos. That in turn cites Dan McCarthy's acme-search.el, which is perhaps the least different feature of this too, except I use pixel positions. This is because I use variable-width fonts (like Acme does, Google Noto in case you are wondering).
 
 
-<a id="org552980a"></a>
+<a id="org08beae9"></a>
 
 # Missing features
 
@@ -61,19 +62,19 @@ This is a newly written software, but heavily inspired by <https://github.com/ak
 -   **Exchange primary and secondary selection:** This is not something that Acme actually has, but I would find this extremely useful.
 
 
-<a id="org223ef93"></a>
+<a id="orgee615b2"></a>
 
 # Bugs
 
 -   **Bug with undo-tree:** When using undo-tree, sometimes the undo breaks, when you try to undo past a left-middle; left-right chord. This only happens if you haven't opened the undo-tree buffer before starting to undo past the acme-mouse's undo. Probably just not using undo would fix it. Or possibly using undo-tree-undo when you have undo-tree, which is what is implemented currently, but needs more testing.
 
 
-<a id="org581efab"></a>
+<a id="org81e242b"></a>
 
 # License
 
 
-<a id="org055f2b7"></a>
+<a id="org8535ec3"></a>
 
 ## GPLv2+
 
@@ -86,17 +87,17 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 
-<a id="org8cbfc3b"></a>
+<a id="org6a3d144"></a>
 
 # Implementation
 
 
-<a id="org5c40490"></a>
+<a id="org84afcf4"></a>
 
 ## Acme-mouse library
 
 
-<a id="orgd4fbba5"></a>
+<a id="orgc21c0e5"></a>
 
 ### Global variables
 
@@ -121,7 +122,7 @@ You should have received a copy of the GNU General Public License along with thi
 ```
 
 
-<a id="org0d33632"></a>
+<a id="org30facd4"></a>
 
 ### Basic state-machine
 
@@ -160,7 +161,7 @@ These are the default bindings.
 ```
 
 
-<a id="orga8830a3"></a>
+<a id="org5a1c80d"></a>
 
 ### State-machine driver
 
@@ -195,6 +196,7 @@ If we only change the state, then we want to do that transparently, hence settin
                    :initial-value nil)
       (t (setq acme-mouse-state 'none)))
      (when (eq acme-mouse-state 'none)
+       (acme-mouse-face-unmap)
        (setq acme-mouse-start-click nil))))
 
 (defun acme-mouse-save-mark-point-active ()
@@ -208,7 +210,38 @@ If we only change the state, then we want to do that transparently, hence settin
 ```
 
 
-<a id="org94c00a2"></a>
+<a id="orgb8aac47"></a>
+
+### Extending the state-machine
+
+```elisp
+(defun acme-mouse-lookup (start transition end)
+  (let (ret)
+    (dolist (el acme-mouse-transition-table
+                (list start transition end))
+      (setq ret el))))
+
+(defun acme-mouse-add (start transition end &rest actions)
+  (let ((entry (acme-mouse-lookup start transition end)))
+    (setcdr (cddr entry)
+            (append (cdddr entry) actions))))
+
+(defun acme-mouse-del (start transition end &rest actions)
+  (let ((entry (acme-mouse-lookup start transition end)))
+    (if actions
+        ;; remove-actions
+        (seq-map
+         (lambda (action)
+           (setcdr (cddr entry)
+                   (seq-filter (lambda (action) (equal actions))
+                               (cdddr entry))))
+         actions)
+      ;; remove-all
+      (setcdr (cddr entry) nil))))
+```
+
+
+<a id="orgc633530"></a>
 
 ### Selection faces
 
@@ -246,7 +279,7 @@ If we only change the state, then we want to do that transparently, hence settin
 ```
 
 
-<a id="org9a0734a"></a>
+<a id="orgbaddb5e"></a>
 
 ### Library
 
@@ -259,12 +292,12 @@ If we only change the state, then we want to do that transparently, hence settin
 ```
 
 
-<a id="org192f2a3"></a>
+<a id="org1c6fd41"></a>
 
 ## Fundamental acme-mouse
 
 
-<a id="orga3264da"></a>
+<a id="orga366467"></a>
 
 ### State machine
 
@@ -287,32 +320,36 @@ The format of the state machine is `(start symbol next statements...)` where the
            (call-interactively ,click-cmd))))))
 
 ;; Transitions
-(acme-mouse-add 'none '(down middle)
+(acme-mouse-add 'none '(down middle) 'middle
                 (acme-mouse-face-remap 'acme-mouse-face-eval) ;; TODO: remap guard!
                 mouse-drag-region)
-(acme-mouse-add 'none '(down right)
+(acme-mouse-add 'none '(down right) 'right
                 (acme-mouse-face-remap 'acme-mouse-face-search)
                 mouse-drag-region)
-(acme-mouse-add 'left '(down middle) acme-mouse-cut)
-(acme-mouse-add 'left '(down right) acme-mouse-paste)
 
-(acme-mouse-add 'middle '(up middle)
+(acme-mouse-add 'left '(down middle) 'left-middle
+                acme-mouse-cut)
+(acme-mouse-add 'left '(down right) 'left-right
+                acme-mouse-paste)
+
+(acme-mouse-add 'middle '(up middle) 'none
                 mouse-set-point
                 (region-or-click 'acme-mouse-eval-region 'acme-mouse-eval-click))
-(acme-mouse-add 'right '(up right)
+(acme-mouse-add 'right '(up right) 'none
                 mouse-set-point
                 (region-or-click 'acme-mouse-search-region 'acme-mouse-search-click))
-(acme-mouse-add 'middle-left '(up left)
+
+(acme-mouse-add 'middle-left '(up left) 'middle
                 acme-mouse-eval-pipe-region)
 
-(acme-mouse-add 'middle '(drag middle)
+(acme-mouse-add 'middle '(drag middle) 'none
                 acme-mouse-eval-region)
-(acme-mouse-add 'right '(drag right)
+(acme-mouse-add 'right '(drag right) 'none
                 acme-mouse-search-region)
 ```
 
 
-<a id="org637f6f1"></a>
+<a id="orgc99935d"></a>
 
 ### Acme functionality
 
@@ -395,11 +432,12 @@ The format of the state machine is `(start symbol next statements...)` where the
     ```
 
 
-<a id="orgd9285ec"></a>
+<a id="orgb7a14ce"></a>
 
 ### Keymap
 
 ```elisp
+;; TODO: This could be generated automatically
 (defvar acme-mouse-map
   (let ((keymap (make-sparse-keymap)))
     (define-key keymap [(down-mouse-1)] (acme-mouse-make-transition down left))
@@ -419,10 +457,13 @@ The format of the state machine is `(start symbol next statements...)` where the
     (define-key keymap [(drag-mouse-3)] (acme-mouse-make-transition drag right))
     keymap)
   "Keymap for `acme-mouse` mode.")
+;; By something like
+(acme-mouse-generate-keymap
+ "Keymap for 'acme-mouse-fundamental' mode.")
 ```
 
 
-<a id="orge6b3083"></a>
+<a id="orgb3cd269"></a>
 
 ### Minor mode
 

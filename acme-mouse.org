@@ -171,6 +171,32 @@ hence setting the ~last-command~.
       (setq mark-active active)))
 #+END_SRC
 
+** Extending the state-machine
+#+BEGIN_SRC elisp :tangle acme-mouse.el
+  (defun acme-mouse-lookup (start transition end)
+    (let (ret)
+      (dolist (el acme-mouse-transition-table
+                  (list start transition end))
+        (setq ret el))))
+
+  (defun acme-mouse-add (start transition end &rest actions)
+    (let ((entry (acme-mouse-lookup start transition end)))
+      (setcdr (cddr entry)
+              (append (cdddr entry) actions))))
+
+  (defun acme-mouse-del (start transition end &rest actions)
+    (let ((entry (acme-mouse-lookup start transition end)))
+      (if actions
+          ;; remove-actions
+          (seq-map
+           (lambda (action)
+             (setcdr (cddr entry)
+                     (seq-filter (lambda (action) (equal actions))
+                                 (cdddr entry))))
+           actions)
+        ;; remove-all
+        (setcdr (cddr entry) nil))))
+#+END_SRC
 ** Selection faces
 #+BEGIN_SRC elisp :tangle acme-mouse.el
   (defun acme-mouse-face-unmap ()

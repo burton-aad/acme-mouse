@@ -23,27 +23,31 @@ where the statements are either a variable mapping to a command
              (call-interactively ,click-cmd))))))
 
   ;; Transitions
-  (acme-mouse-add 'none '(down middle)
+  (acme-mouse-add 'none '(down middle) 'middle
                   (acme-mouse-face-remap 'acme-mouse-face-eval) ;; TODO: remap guard!
                   mouse-drag-region)
-  (acme-mouse-add 'none '(down right)
+  (acme-mouse-add 'none '(down right) 'right
                   (acme-mouse-face-remap 'acme-mouse-face-search)
                   mouse-drag-region)
-  (acme-mouse-add 'left '(down middle) acme-mouse-cut)
-  (acme-mouse-add 'left '(down right) acme-mouse-paste)
 
-  (acme-mouse-add 'middle '(up middle)
+  (acme-mouse-add 'left '(down middle) 'left-middle
+                  acme-mouse-cut)
+  (acme-mouse-add 'left '(down right) 'left-right
+                  acme-mouse-paste)
+
+  (acme-mouse-add 'middle '(up middle) 'none
                   mouse-set-point
                   (region-or-click 'acme-mouse-eval-region 'acme-mouse-eval-click))
-  (acme-mouse-add 'right '(up right)
+  (acme-mouse-add 'right '(up right) 'none
                   mouse-set-point
                   (region-or-click 'acme-mouse-search-region 'acme-mouse-search-click))
-  (acme-mouse-add 'middle-left '(up left)
+
+  (acme-mouse-add 'middle-left '(up left) 'middle
                   acme-mouse-eval-pipe-region)
 
-  (acme-mouse-add 'middle '(drag middle)
+  (acme-mouse-add 'middle '(drag middle) 'none
                   acme-mouse-eval-region)
-  (acme-mouse-add 'right '(drag right)
+  (acme-mouse-add 'right '(drag right) 'none
                   acme-mouse-search-region)
 #+END_SRC
 
@@ -134,6 +138,7 @@ where the statements are either a variable mapping to a command
 
 ** Keymap
 #+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
+  ;; TODO: This could be generated automatically
   (defvar acme-mouse-map
     (let ((keymap (make-sparse-keymap)))
       (define-key keymap [(down-mouse-1)] (acme-mouse-make-transition down left))
@@ -153,6 +158,9 @@ where the statements are either a variable mapping to a command
       (define-key keymap [(drag-mouse-3)] (acme-mouse-make-transition drag right))
       keymap)
     "Keymap for `acme-mouse` mode.")
+  ;; By something like
+  (acme-mouse-generate-keymap
+   "Keymap for 'acme-mouse-fundamental' mode.")
 #+END_SRC
 ** Minor mode
 #+BEGIN_SRC elisp :tangle acme-mouse-fundamental.el
