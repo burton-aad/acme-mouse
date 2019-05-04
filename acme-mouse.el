@@ -1,7 +1,6 @@
 ;;; acme-mouse.el --- mouse-button chording
 
-;; Author: Alex Kritikos (my gmail.com username is alex.kritikos)
-;; Copyright (C) 2009, Alex Kritikos, see section 'Terms'.
+;; Author: Alexandre Adolphe, Alex Kritikos (my gmail.com username is alex.kritikos)
 
 ;; Description:
 
@@ -42,6 +41,11 @@
 
 (require 'cl)
 
+(defgroup acme-mouse nil
+  "Acme mouse chording mode for Emacs"
+  :group 'mouse)
+
+
 ;; Acme mouse chording doesn't make much sense without
 ;; delete-selection mode
 (delete-selection-mode t)
@@ -49,32 +53,6 @@
 (setq mouse-drag-copy-region nil)
 (setq acme-mouse-state 'none)
 (setq acme-last-command 'none)
-
-;; default: mouse-drag-region
-(global-set-key [(down-mouse-1)] 'acme-down-mouse-1)
-
-;; default: mouse-set-point
-(global-set-key [(mouse-1)] 'acme-mouse-1)
-
-;; default: mouse-set-region
-(global-set-key [(drag-mouse-1)] 'acme-drag-mouse-1)
-(global-set-key [(double-drag-mouse-1)] 'acme-double-mouse-1)
-(global-set-key [(triple-drag-mouse-1)] 'acme-double-mouse-1)
-
-(global-set-key [(double-mouse-1)] 'acme-double-mouse-1)
-(global-set-key [(triple-mouse-1)] 'acme-double-mouse-1)
-
-;; default: none
-(global-set-key [(down-mouse-2)] 'acme-down-mouse-2)
-
-;; default: mouse-yank-at-click
-(global-set-key [(mouse-2)] 'acme-mouse-2)
-
-;; default: none
-(global-set-key [(down-mouse-3)] 'acme-down-mouse-3)
-
-;; default: mouse-save-then-kill
-(global-set-key [(mouse-3)] 'acme-mouse-3)
 
 ;; everything starts with this function, so set state accordingly
 (defun acme-down-mouse-1 (click)
@@ -206,5 +184,35 @@ This is inspired by Rob Pike's Acme."
       (universal-argument)
       (recenter))
     (move-mouse-to-point)))
+
+
+(defvar acme-mouse-map
+  (let ((keymap (make-sparse-keymap)))
+    (define-key keymap [(down-mouse-1)] 'acme-down-mouse-1)
+    (define-key keymap [(down-mouse-2)] 'acme-down-mouse-2)
+    (define-key keymap [(down-mouse-3)] 'acme-down-mouse-3)
+    (define-key keymap [(mouse-1)] 'acme-mouse-1)
+    (define-key keymap [(mouse-2)] 'acme-mouse-2)
+    (define-key keymap [(mouse-3)] 'acme-mouse-3)
+    (define-key keymap [(double-mouse-1)] 'acme-double-mouse-1)
+    (define-key keymap [(triple-mouse-1)] 'acme-double-mouse-1)
+    (define-key keymap [(drag-mouse-1)] 'acme-drag-mouse-1)
+    keymap)
+  "Keymap for `acme-mouse` mode.")
+
+;;;###autoload
+(define-minor-mode acme-mouse
+  "Acme mouse mode enables the button actions of Acme:
+  * Chording left and middle cuts the region
+  * Chording left and middle pastes at point
+  * Clicking with middle evaluates code at point
+  * Clicking with right searches word at point
+  * Dragging with middle evaluates selected region
+  * Dragging with right searches region"
+  nil
+  " Acme-Mouse"
+  acme-mouse-map
+  :group 'acme-mouse
+  :global t)
 
 (provide 'acme-mouse)
