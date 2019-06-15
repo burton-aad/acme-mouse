@@ -26,6 +26,8 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+;; acme-mouse-org.el
+
 ;; Todo:
 
 ;; Allow drag-highlighting with the right button (secondary selection?)
@@ -44,6 +46,21 @@
 (defgroup acme-mouse nil
   "Acme mouse chording mode for Emacs"
   :group 'mouse)
+
+(defcustom acme-mouse-select-button (kbd "<mouse-1>")
+  "Define the mouse button used to select region and place the cursor (acme left click)."
+  :type 'key-sequence
+  :group 'acme-mouse)
+
+(defcustom acme-mouse-exec-button (kbd "<mouse-2>")
+  "Define the mouse button to evaluate text as code (acme middle click)."
+  :type 'key-sequence
+  :group 'acme-mouse)
+
+(defcustom acme-mouse-search-button (kbd "<mouse-3>")
+  "Define the mouse button to search for text (acme right click)."
+  :type 'key-sequence
+  :group 'acme-mouse)
 
 
 ;; Acme mouse chording doesn't make much sense without
@@ -186,17 +203,26 @@ This is inspired by Rob Pike's Acme."
     (move-mouse-to-point)))
 
 
+;; (global-set-key [(double-drag-mouse-1)] 'acme-double-mouse-1)
+;; (global-set-key [(triple-drag-mouse-1)] 'acme-double-mouse-1)
+
 (defvar acme-mouse-map
   (let ((keymap (make-sparse-keymap)))
-    (define-key keymap [(down-mouse-1)] 'acme-down-mouse-1)
-    (define-key keymap [(down-mouse-2)] 'acme-down-mouse-2)
-    (define-key keymap [(down-mouse-3)] 'acme-down-mouse-3)
-    (define-key keymap [(mouse-1)] 'acme-mouse-1)
-    (define-key keymap [(mouse-2)] 'acme-mouse-2)
-    (define-key keymap [(mouse-3)] 'acme-mouse-3)
-    (define-key keymap [(double-mouse-1)] 'acme-double-mouse-1)
-    (define-key keymap [(triple-mouse-1)] 'acme-double-mouse-1)
-    (define-key keymap [(drag-mouse-1)] 'acme-drag-mouse-1)
+    (define-key keymap (kbd "<down-mouse-1>") 'acme-down-mouse-1)
+    (define-key keymap (kbd "<down-mouse-2>") 'acme-down-mouse-2)
+    (define-key keymap (kbd "<down-mouse-3>") 'acme-down-mouse-3)
+    (define-key keymap acme-mouse-select-button 'acme-mouse-1)
+    (define-key keymap acme-mouse-exec-button 'acme-mouse-2)
+    (define-key keymap acme-mouse-search-button 'acme-mouse-3)
+    (define-key keymap (kbd "<double-mouse-1>") 'acme-double-mouse-1)
+    ;; (define-key keymap (kbd "<double-mouse-2>") (acme-mouse-make-transition up middle))
+    ;; (define-key keymap (kbd "<double-mouse-3>") (acme-mouse-make-transition up right))
+    (define-key keymap (kbd "<triple-mouse-1>") 'acme-double-mouse-1)
+    ;; (define-key keymap (kbd "<triple-mouse-2>") (acme-mouse-make-transition up middle))
+    ;; (define-key keymap (kbd "<triple-mouse-3>") (acme-mouse-make-transition up right))
+    (define-key keymap (kbd "<drag-mouse-1>") 'acme-drag-mouse-1)
+    ;; (define-key keymap (kbd "<drag-mouse-2>") (acme-mouse-make-transition drag middle))
+    ;; (define-key keymap (kbd "<drag-mouse-3>") (acme-mouse-make-transition drag right))
     keymap)
   "Keymap for `acme-mouse` mode.")
 
